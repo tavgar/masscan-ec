@@ -1,70 +1,113 @@
 # masscan-ec
 
-`masscan-ec` is a drop-in wrapper for [Masscan](https://github.com/robertdavidgraham/masscan) that adds Naabu‑style CDN exclusion behavior. When scanning large IP ranges, `masscan-ec` ensures known CDN IP blocks are only scanned on a limited port set (default: 80 and 443), while non-CDN targets receive the full port scan.
+A lightweight wrapper for [masscan](https://github.com/robertdavidgraham/masscan) that adds Naabu‑style `--exclude‑cdn` (or `-ec`) behavior. This tool lets you skip scanning targets within known CDN IP ranges, reducing noise and focusing on non‑CDN endpoints.
 
----
+## Key Features
 
-## Features
+* **Exclude CDN networks**: `-ec / --exclude-cdn` skips any IP that belongs to a CDN, never probed.
+* **Up-to-date CDN feeds**: Aggregates ranges from seven public sources and caches them locally:
 
-* **CDN exclusion (`-ec` / `--exclude-cdn`)**: Limit Masscan’s scan of CDN IP ranges to a small set of ports (default: 80,443).
-* **Automatic CDN list updates**: Fetches the latest CDN IP CIDRs from ProjectDiscovery’s cdncheck dataset and caches them for up to 7 days.
-* **Blank / comment stripping**: Ignores blank lines and `#` comments in include (`-iL`) files.
-* **Hostname support**: Resolves hostnames in target lists to IPv4 addresses; skips unresolved names with a warning.
-* **Flag-safe parsing**: Recognizes and preserves all Masscan flags (like `-p`, `--rate`, etc.) so port parameters are never mistaken for targets.
+  * ProjectDiscovery *cdncheck* mega‑list
+  * Cloudflare official IP list
+  * AWS **CloudFront** ranges
+  * Google **CDN / APIs** (google minus cloud.json)
+  * Fastly public IP list
+  * Akamai (MISP warninglist)
+* **Custom CIDRs**: `--cdn-extra-file FILE` to inject your own CIDR blocks.
+* **Cache management**: `--refresh-cdn-cache` to force a fresh download of all feeds.
+* **Safe input handling**: Blank lines, comments, hostnames, and nested include-files are processed correctly.
+* **Transparent masscan flags**: Flags like `-p`, `--rate`, etc. are never misinterpreted as targets.
 
----
+## Installation
 
-## Requirements
+1. **Clone the repository**
 
-* **Python 3.8+**
-* **Masscan** installed and available in your `$PATH`.
+   ```bash
+   git clone https://github.com/yourname/masscan-ec.git
+   cd masscan-ec
+   ```
+2. **Ensure dependencies**
 
-All other dependencies use the Python standard library.
+   * Python 3.7+
+   * `masscan` must be installed and on your `$PATH`
+3. **(Optional) Create a virtual environment**
 
----
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+4. **Install Python requirements** (if any)
 
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 ## Usage
 
+### Basic scan excluding CDNs
+
 ```bash
-python3 masscan-ec.py [options] [targets]
+./masscan-ec -ec -p80,443 10.0.0.0/24
 ```
 
-### Key Flags
+* Scans port 80 and 443 on 10.0.0.0/24, skipping any IPs in known CDN ranges.
 
-| Flag                        | Description                                                        |
-| --------------------------- | ------------------------------------------------------------------ |
-| `-ec`, `--exclude-cdn`      | Enable CDN exclusion behavior.                                     |
-| `--cdn-ports PORTS`         | Comma-separated ports for CDN IPs (default: `80,443`).             |
-| `-p PORTS`, `--ports PORTS` | Masscan port specification (e.g. `80`, `1-65535`, `22,80,443`).    |
-| `-iL FILE`, `--includefile` | Read targets from FILE (blank lines & comments supported).         |
-| `--rate RATE`               | Masscan packet rate.                                               |
-| *All other Masscan options* | Supported (e.g. `--router-mac`, `-e <iface>`, `-oX <file>`, etc.). |
+### Common options
+
+| Option                  | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `-ec`, `--exclude-cdn`  | Enable CDN exclusion mode.                               |
+| `--cdn-extra-file FILE` | Append extra CIDR ranges (one per line) to exclude.      |
+| `--refresh-cdn-cache`   | Bypass and redownload CDN feeds, refreshing local cache. |
+
+*All other `masscan` flags* are passed through unchanged, e.g., `-p`, `--rate`, `-e`, etc.
 
 ### Examples
 
-1. **Full 65k-port scan**, skipping CDN blocks (those on ports 80 & 443 only):
+* **Exclude CDNs and set scan rate**:
 
-   ```bash
-   masscan-ec -ec -p1-65535 -iL ips-inscope.txt --rate 5000
-   ```
+  ```bash
+  masscan-ec -ec --rate=1000 -p80 192.168.0.0/16
+  ```
+* **Add custom CDN ranges**:
 
-2. **Scan port 22 and 3389**, limiting CDN IPs to port 443:
+  ```bash
+  echo "203.0.113.0/24" > extra-cdns.txt
+  masscan-ec -ec --cdn-extra-file extra-cdns.txt -p443 198.51.100.0/24
+  ```
+* **Force cache refresh**:
 
-   ```bash
-   masscan-ec -ec -p22,3389 --cdn-ports 443 example.com
-   ```
+  ```bash
+  masscan-ec -ec --refresh-cdn-cache -p53 example.com
+  ```
 
-3. **Standard Masscan usage** (no CDN logic):
+## How It Works
 
-   ```bash
-   masscan-ec -p80,443 203.0.113.0/24 --rate 1000
-   ```
+1. **Download & cache**: Fetches IP ranges from multiple public feeds; cached under `~/.cache/masscan_cdn_ranges.json` for up to 3 days.
+2. **Parsing**: Extracts CIDRs via JSON parsing or regex, deduplicates, and filters Google ranges (`goog.json` minus `cloud.json`).
+3. **Target expansion**: Resolves hostnames and includes nested files safely.
+4. **Filtering**: Splits targets into `non-cdn` and `cdn-only` lists.
+5. **Masscan execution**: Creates a temporary target file for `non-cdn` IPs and runs `masscan` with original flags.
+
+## CDN Sources
+
+* ProjectDiscovery `cdncheck`: GitHub JSON feed
+* Cloudflare: `https://www.cloudflare.com/ips-v4`
+* AWS CloudFront: `https://ip-ranges.amazonaws.com/ip-ranges.json`
+* Google APIs: `https://www.gstatic.com/ipranges/goog.json` & `cloud.json`
+* Fastly: `https://api.fastly.com/public-ip-list`
+* Akamai (MISP): `https://raw.githubusercontent.com/MISP/misp-warninglists/main/lists/akamai/list.json`
+
+## Troubleshooting
+
+* **Permission denied**: Ensure `masscan` is executable and in your `$PATH`.
+* **Stale cache**: Use `--refresh-cdn-cache` if you suspect outdated ranges.
+* **Timeouts or 403s**: The script uses a browser-like User-Agent; check network/firewall settings.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-## Caching Behavior
-
-* CDN IP lists are stored at `~/.cache/masscan_cdn_ranges.json`.
-* Cached data is considered fresh for **7 days**; after that, the script re-downloads.
-* If network download fails and no cache exists, the script exits with an error.
+*Stay focused on real targets by keeping CDNs out of your scans!*
