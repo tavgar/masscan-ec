@@ -1,6 +1,6 @@
 # masscan-ec
 
-A lightweight wrapper for [masscan](https://github.com/robertdavidgraham/masscan) that adds Naabu‑style `--exclude‑cdn` (or `-ec`) behavior. This tool lets you skip scanning targets within known CDN IP ranges, reducing noise and focusing on non‑CDN endpoints.
+A lightweight wrapper for [masscan](https://github.com/robertdavidgraham/masscan) that adds Naabu‑style `--exclude‑cdn` (or `-ec`) behavior, and way better than Naabu -ec. This tool lets you skip scanning targets within known CDN IP ranges, reducing noise and focusing on non‑CDN endpoints.
 
 ## Key Features
 
