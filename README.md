@@ -23,7 +23,7 @@ A lightweight wrapper for [masscan](https://github.com/robertdavidgraham/masscan
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/yourname/masscan-ec.git
+   git clone https://github.com/tavgar/masscan-ec.git
    cd masscan-ec
    ```
 2. **Ensure dependencies**
@@ -73,12 +73,12 @@ A lightweight wrapper for [masscan](https://github.com/robertdavidgraham/masscan
 
   ```bash
   echo "203.0.113.0/24" > extra-cdns.txt
-  masscan-ec -ec --cdn-extra-file extra-cdns.txt -p443 198.51.100.0/24
+  masscan-ec -ec --cdn-extra-file extra-cdns.txt -p443 -iL ips.txt
   ```
 * **Force cache refresh**:
 
   ```bash
-  masscan-ec -ec --refresh-cdn-cache -p53 example.com
+  masscan-ec -ec --refresh-cdn-cache -p53 -iL ips.txt
   ```
 
 ## How It Works
